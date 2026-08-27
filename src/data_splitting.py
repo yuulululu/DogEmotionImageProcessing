@@ -6,9 +6,12 @@ data_splitting.py - Stratified Data Splitting Pipeline (Train / Val / Test)
   2. ใช้ Stratified Split เพื่อรักษาสัดส่วนของ Class ให้เท่ากันทุก Subset
   3. กำหนด Random Seed (42) ให้ผลลัพธ์ Reproducible 100%
      พร้อมระบบ Group-aware Splitting ป้องกัน Data Leakage
-     (ภาพต้นฉบับและภาพ Augmented จากภาพเดียวกันจะอยู่ Subset เดียวกันเสมอ)
-  4. บันทึก Manifest (.csv) รายละเอียดครบถ้วนลงใน reports/ และ data/splits/
-  5. สร้างภาพสรุปและสถิติการกระจายตัวของข้อมูลในแต่ละ Split
+  4. คัดลอก (Copy) ไฟล์ภาพที่แบ่งแล้วไปยังโฟลเดอร์แยก:
+     - data/splits/train/<class_name>/
+     - data/splits/val/<class_name>/
+     - data/splits/test/<class_name>/
+  5. บันทึก Manifest (.csv) รายละเอียดครบถ้วนลงใน reports/ และ data/splits/
+  6. สร้างภาพสรุปและสถิติการกระจายตัวของข้อมูลในแต่ละ Split
 """
 
 import os
@@ -76,13 +79,10 @@ def compute_md5(filepath: Path) -> str:
 
 
 def load_dataset_records(data_dir: Path) -> list[dict]:
-    """
-    สแกนหารูปภาพทั้งหมดและสร้าง record ข้อมูลสำหรับทำ Stratified Split
-    """
+    """สแกนหารูปภาพทั้งหมดและสร้าง record ข้อมูลสำหรับทำ Stratified Split"""
     valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
     records = []
 
-    # ตรวจสอบว่ามีโฟลเดอร์ข้อมูลหรือไม่
     if not data_dir.exists():
         return []
 
@@ -113,17 +113,10 @@ def stratified_group_split(
     test_ratio: float = TEST_RATIO,
     seed: int = RANDOM_SEED,
 ) -> list[dict]:
-    """
-    ทำการแบ่งข้อมูลแบบ Stratified Split ร่วมกับ Group-aware:
-      1. แยกข้อมูลตาม Class Label
-      2. รวมรูปภาพที่มี Group ID เดียวกันเข้าเป็นยูนิตเดียวกัน (ป้องกัน Data Leakage)
-      3. สุ่มสลับ (Shuffle) ยูนิตในแต่ละ Class ด้วย Random Seed คงที่
-      4. แบ่งเข้า Train (70%), Val (15%), Test (15%) ตามสัดส่วนของแต่ละ Class
-    """
+    """ทำการแบ่งข้อมูลแบบ Stratified Split ร่วมกับ Group-aware"""
     assert abs((train_ratio + val_ratio + test_ratio) - 1.0) < 1e-5, "อัตราส่วนรวมต้องเท่ากับ 1.0"
     rng = random.Random(seed)
 
-    # 1. จัดกลุ่ม: class -> group_id -> list of records
     class_groups: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
     for r in records:
         class_groups[r["class_label"]][r["group_id"]].append(r)
@@ -138,12 +131,11 @@ def stratified_group_split(
 
     for class_name, groups_dict in sorted(class_groups.items()):
         group_keys = list(groups_dict.keys())
-        rng.shuffle(group_keys)  # Reproducible shuffle per class
+        rng.shuffle(group_keys)
 
         n_total_groups = len(group_keys)
         n_train = int(round(n_total_groups * train_ratio))
         n_val = int(round(n_total_groups * val_ratio))
-        # ส่วนที่เหลือเข้า test ทั้งหมดเพื่อป้องกันเศษหล่นหาย
         n_test = n_total_groups - n_train - n_val
 
         train_keys = set(group_keys[:n_train])
@@ -152,7 +144,6 @@ def stratified_group_split(
 
         print(f"  {class_name:<20s} | {n_total_groups:<12d} | {len(train_keys):<8d} | {len(val_keys):<8d} | {len(test_keys):<8d}")
 
-        # กำหนด split tag ให้แต่ละ record
         for gid, rec_list in groups_dict.items():
             if gid in train_keys:
                 split_tag = "train"
@@ -173,9 +164,7 @@ def stratified_group_split(
 # 3. ตรวจสอบ DATA LEAKAGE VERIFICATION
 # ══════════════════════════════════════════════
 def verify_no_data_leakage(records: list[dict]) -> bool:
-    """
-    ตรวจสอบและยืนยันว่าไม่มี Group ID เดียวกันหลุดข้าม Split (Data Leakage Check)
-    """
+    """ตรวจสอบและยืนยันว่าไม่มี Group ID เดียวกันหลุดข้าม Split"""
     split_groups = defaultdict(set)
     for r in records:
         split_groups[r["split"]].add(r["group_id"])
@@ -200,12 +189,44 @@ def verify_no_data_leakage(records: list[dict]) -> bool:
 
 
 # ══════════════════════════════════════════════
-# 4. บันทึก MANIFEST (.CSV)
+# 4. คัดลอกภาพไปยังโฟลเดอร์แยกตาม Split (Copy to Split Folders)
+# ══════════════════════════════════════════════
+def copy_images_to_splits(records: list[dict], output_base_dir: Path = SPLITS_OUTPUT_DIR):
+    """
+    คัดลอกไฟล์รูปภาพไปยังโฟลเดอร์โครงสร้าง Train / Val / Test แยกตามแต่ละ Class
+    โครงสร้าง:
+      data/splits/train/<class_name>/<filename>
+      data/splits/val/<class_name>/<filename>
+      data/splits/test/<class_name>/<filename>
+    """
+    print(f"\n{'='*65}")
+    print(f"  COPYING SPLIT IMAGES → {output_base_dir.relative_to(PROJECT_ROOT)}/")
+    print(f"{'='*65}")
+
+    counts = defaultdict(int)
+    for rec in records:
+        src_path: Path = rec["filepath"]
+        split_name = rec["split"]
+        class_name = rec["class_label"]
+
+        dest_dir = output_base_dir / split_name / class_name
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / src_path.name
+
+        shutil.copy2(src_path, dest_path)
+        counts[split_name] += 1
+
+    print(f"  ✓ Copied Train Images : {counts['train']:,} files")
+    print(f"  ✓ Copied Val Images   : {counts['val']:,} files")
+    print(f"  ✓ Copied Test Images  : {counts['test']:,} files")
+    print(f"  → Total Copied: {sum(counts.values()):,} files")
+
+
+# ══════════════════════════════════════════════
+# 5. บันทึก MANIFEST (.CSV)
 # ══════════════════════════════════════════════
 def save_manifests(records: list[dict]):
-    """
-    บันทึก Manifest รายชื่อไฟล์ทั้งหมดและรายชื่อไฟล์แยกแต่ละ Split ลงเป็น .csv
-    """
+    """บันทึก Manifest รายชื่อไฟล์ทั้งหมดและรายชื่อไฟล์แยกแต่ละ Split ลงเป็น .csv"""
     print(f"\n{'='*65}")
     print("  SAVING MANIFEST FILES (.CSV)")
     print(f"{'='*65}")
@@ -242,7 +263,7 @@ def save_manifests(records: list[dict]):
 
 
 # ══════════════════════════════════════════════
-# 5. สรุปสถิติ & สร้างกราฟการกระจายตัวของ Split
+# 6. สรุปสถิติ & สร้างกราฟการกระจายตัวของ Split
 # ══════════════════════════════════════════════
 def generate_split_report_chart(records: list[dict]):
     """สร้างกราฟแสดงสัดส่วน Class ในแต่ละ Split เพื่อยืนยันคุณสมบัติ Stratified"""
@@ -265,7 +286,6 @@ def generate_split_report_chart(records: list[dict]):
     print(f"  Test Set     : {test_count:>6,} ({test_count/total_images*100:.1f}%)")
     print(f"{'='*65}")
 
-    # Plot Grouped Bar Chart
     x = np.arange(len(classes))
     width = 0.25
 
@@ -337,14 +357,17 @@ def main():
     # 4. ตรวจสอบ Zero Data Leakage
     verify_no_data_leakage(split_records)
 
-    # 5. บันทึกไฟล์ Manifests (.csv)
+    # 5. คัดลอกภาพไปยังโฟลเดอร์แยก data/splits/train, val, test
+    copy_images_to_splits(split_records, SPLITS_OUTPUT_DIR)
+
+    # 6. บันทึกไฟล์ Manifests (.csv)
     save_manifests(split_records)
 
-    # 6. สร้างรายงานและกราฟสรุป
+    # 7. สร้างรายงานและกราฟสรุป
     generate_split_report_chart(split_records)
 
     print(f"\n{'='*65}")
-    print("  ✅ Data Splitting สำเร็จเรียบร้อยครบถ้วน!")
+    print("  ✅ Data Splitting และ Copy ไฟล์เสร็จสมบูรณ์เรียบร้อย!")
     print("=" * 65)
 
 
