@@ -19,4 +19,4 @@
 ## 4. Data Splitting (`feature/data_splitting`)
 - สคริปต์: `src/data_splitting.py`
 - แบ่งข้อมูล Train / Validation / Test สัดส่วน 70% / 15% / 15% แบบ Stratified
-- ระบบ Group-aware ป้องกัน Data Leakage และเซฟไฟล์ Manifest (.csv) พร้อม Copy ภาพแยกโฟลเดอร์
+- ระบบ Group-aware ป้องกัน Data Leakage และเซฟไฟล์ Manifest (.csv) พร้อม Copy ภาพแยกโฟลเดอร์ `data/splits/`
