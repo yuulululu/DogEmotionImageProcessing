@@ -1,0 +1,22 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Output & Dataset Folders
+data/
+reports/*.png
+reports/figures/*.png
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
