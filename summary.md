@@ -1,16 +1,22 @@
-# สรุปผลการดำเนินงาน: Branch `feature/datacollection`
+# ภาพรวมโครงงาน Dog Emotion Image Processing
 
-## 🎯 วัตถุประสงค์
-จัดเตรียมโครงสร้างโปรเจกต์และเขียนสคริปต์สำหรับดาวน์โหลดชุดข้อมูล Dog Emotion Dataset จาก Kaggle ผ่าน `kagglehub`
+สรุปผลการทำงานของแต่ละโมดูลในโปรเจกต์:
 
-## 📁 โครงสร้างโฟลเดอร์ที่จัดเตรียม
-- `src/` : ที่เก็บโค้ดโปรแกรมหลัก
-- `reports/` : โฟลเดอร์สำหรับรายงานผลและรูปภาพวิเคราะห์
-- `slides/` : โฟลเดอร์สำหรับเก็บสไลด์นำเสนอ
+## 1. Data Collection (`feature/datacollection`)
+- สคริปต์: `src/data_collection.py`
+- ดาวน์โหลด Dataset จาก Kaggle (`mohitagarwal17/dog-emotion-datasetcleaned-version`) อัตโนมัติด้วย `kagglehub`
 
-## 🛠️ รายละเอียดโค้ด `src/data_collection.py`
-- ใช้ `kagglehub.dataset_download("mohitagarwal17/dog-emotion-datasetcleaned-version")` ในการดึงข้อมูลอัตโนมัติ
-- คืนค่า Path ที่เก็บไฟล์ข้อมูลในเครื่องพร้อมแสดงผลเพื่อนำไปใช้ในขั้นตอนถัดไป
+## 2. Exploratory Data Analysis (`feature/eda`)
+- สคริปต์: `src/eda.py`
+- วิเคราะห์ Class Distribution, ขนาดภาพ (Width, Height, Aspect Ratio, File Size), RGB Color Histograms และตรวจหาภาพ Corrupted / Duplicates / Grayscale ปน
+- บันทึกผลลัพธ์ลงใน `reports/figures/`
 
-## 📦 Dependencies
-- `kagglehub`
+## 3. Preprocessing & Image Processing (`feature/preprocessing`)
+- สคริปต์: `src/preprocessing.py`, `src/image_processing.py`
+- Preprocessing: ลบ Corrupted Images, กำจัดภาพซ้ำด้วย pHash, ทำ Oversampling แก้ Class Imbalance, แปลงภาพเป็น `.jpg` / RGB
+- Image Processing: Resize $233 \times 233$, Denoise ด้วย Median Filter ลบ Salt & Pepper noise, Data Augmentation, Normalization/Standardization
+
+## 4. Data Splitting (`feature/data_splitting`)
+- สคริปต์: `src/data_splitting.py`
+- แบ่งข้อมูล Train / Validation / Test สัดส่วน 70% / 15% / 15% แบบ Stratified
+- ระบบ Group-aware ป้องกัน Data Leakage และเซฟไฟล์ Manifest (.csv) พร้อม Copy ภาพแยกโฟลเดอร์
