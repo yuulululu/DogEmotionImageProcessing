@@ -4,14 +4,24 @@ Streamlit web app สำหรับทดสอบโมเดล Image Classif
 Deploy ฟรี:        push โฟลเดอร์นี้ขึ้น GitHub แล้วเชื่อมกับ https://share.streamlit.io
 """
 
+import base64
+import io
+
 import streamlit as st
 import numpy as np
-import pandas as pd
-import altair as alt
 from PIL import Image
 from ultralytics import YOLO
 
-st.set_page_config(page_title="AI Image Classifier", page_icon="🔮", layout="centered")
+st.set_page_config(page_title="Dog Emotion Classifier", layout="centered")
+
+# สีไล่ตามอันดับ (rank 1 = เขียว, 2 = ส้ม, 3 = ม่วง, 4 = ฟ้า, 5 = ชมพู)
+RANK_COLORS = [
+    ("#22c55e", "#4ade80"),  # 1 green
+    ("#f59e0b", "#fbbf24"),  # 2 orange
+    ("#8b5cf6", "#a78bfa"),  # 3 purple
+    ("#3b82f6", "#60a5fa"),  # 4 blue
+    ("#ec4899", "#f472b6"),  # 5 pink
+]
 
 # ----------------------------------------------------------------------
 # 1. โหลดโมเดล (cache ไว้ไม่ให้โหลดซ้ำทุกครั้งที่ interact กับหน้าเว็บ)
@@ -45,10 +55,6 @@ uploaded_file = st.file_uploader("เลือกไฟล์ภาพ (jpg, png
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(image, caption="ภาพที่อัปโหลด", use_container_width=True)
-
     # 3. รัน inference
     with st.spinner("กำลังทำนายผล..."):
         results = model.predict(source=np.array(image), verbose=False)
@@ -58,36 +64,153 @@ if uploaded_file is not None:
     top1_conf = result.probs.top1conf.item()
     top1_name = result.names[top1_idx]
 
-    with col2:
-        st.metric("Top-1 Prediction", top1_name, f"{top1_conf*100:.2f}%")
-
-    # 4. แสดง Top-5 เป็นกราฟแท่งแนวนอน (เรียงจากมากไปน้อย)
-    st.subheader("📊 Top-5 ความน่าจะเป็น")
-
-    top5_idx = result.probs.top5
-    top5_conf = result.probs.top5conf.tolist()
-    df_top5 = pd.DataFrame({
-        "class": [result.names[i] for i in top5_idx],
-        "percent": [c * 100 for c in top5_conf],
-    })
-    df_top5["label"] = df_top5["percent"].map(lambda p: f"{p:.1f}%")
-
-    bar_chart = (
-        alt.Chart(df_top5)
-        .mark_bar(color="#22c55e", cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-        .encode(
-            x=alt.X("percent:Q", title="ความมั่นใจ (%)", scale=alt.Scale(domain=[0, 100])),
-            y=alt.Y("class:N", sort="-x", title=None),
-            tooltip=[alt.Tooltip("class:N", title="คลาส"), alt.Tooltip("percent:Q", title="%", format=".2f")],
-        )
+    # เรียงทุกคลาสจากมากไปน้อย (โมเดลนี้มี 4 คลาส: angry/happy/relaxed/sad)
+    n_classes = len(result.names)
+    all_probs = sorted(
+        [(result.names[i], float(result.probs.data[i])) for i in range(n_classes)],
+        key=lambda x: x[1],
+        reverse=True,
     )
-    text_labels = bar_chart.mark_text(align="left", dx=5, color="white" if False else "black").encode(
-        text="label:N"
-    )
-    st.altair_chart((bar_chart + text_labels).properties(height=35 * len(df_top5) + 20), use_container_width=True)
+
+    # ภาพเป็น base64 เพื่อฝังใน CSS background-image
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=90)
+    img_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    # แถวรายการ prediction แต่ละอันดับ
+    rows_html = ""
+    for rank, (cname, prob) in enumerate(all_probs, start=1):
+        pct = prob * 100
+        dark, light = RANK_COLORS[(rank - 1) % len(RANK_COLORS)]
+        rows_html += f"""
+        <div class="pred-row">
+            <div class="pred-rank" style="background:{dark};">{rank}</div>
+            <div class="pred-name">{cname.capitalize()}</div>
+            <div class="pred-bar-bg">
+                <div class="pred-bar-fill" style="width:{max(pct, 2):.1f}%; background:linear-gradient(90deg,{light},{dark});"></div>
+            </div>
+            <div class="pred-pct">{pct:.2f}%</div>
+        </div>
+        """
+
+    card_html = f"""
+    <style>
+        .pred-card {{
+            display: flex;
+            gap: 20px;
+            background: #eef3ff;
+            border-radius: 24px;
+            padding: 20px;
+            flex-wrap: wrap;
+        }}
+        .pred-photo {{
+            position: relative;
+            flex: 0 0 260px;
+            height: 300px;
+            border-radius: 18px;
+            background-image: url("data:image/jpeg;base64,{img_b64}");
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+        }}
+        .pred-badge {{
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            bottom: 12px;
+            background: linear-gradient(90deg, #4ade80, #22c55e);
+            border-radius: 999px;
+            padding: 10px 14px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        }}
+        .pred-badge .label {{
+            color: #ecfdf5;
+            font-size: 12px;
+            font-weight: 500;
+        }}
+        .pred-badge .value {{
+            color: white;
+            font-size: 20px;
+            font-weight: 800;
+        }}
+        .pred-list {{
+            flex: 1 1 300px;
+            background: white;
+            border-radius: 18px;
+            padding: 20px 22px;
+        }}
+        .pred-list-header {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            color: #1e3a8a;
+            font-size: 17px;
+            margin-bottom: 16px;
+        }}
+        .pred-row {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }}
+        .pred-rank {{
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 12px;
+            flex-shrink: 0;
+        }}
+        .pred-name {{
+            width: 80px;
+            font-weight: 600;
+            color: #1e293b;
+            flex-shrink: 0;
+        }}
+        .pred-bar-bg {{
+            flex: 1;
+            background: #e5e9f5;
+            border-radius: 999px;
+            height: 13px;
+            overflow: hidden;
+        }}
+        .pred-bar-fill {{
+            height: 100%;
+            border-radius: 999px;
+        }}
+        .pred-pct {{
+            width: 60px;
+            text-align: right;
+            font-weight: 700;
+            color: #1e293b;
+            flex-shrink: 0;
+        }}
+    </style>
+
+    <div class="pred-card">
+        <div class="pred-photo">
+            <div class="pred-badge">
+                <div class="label">Predicted Emotion</div>
+                <div class="value">{top1_name.capitalize()}</div>
+            </div>
+        </div>
+        <div class="pred-list">
+            <div class="pred-list-header">📊 Predictions</div>
+            {rows_html}
+        </div>
+    </div>
+    """
+
+    st.markdown(card_html, unsafe_allow_html=True)
 
     with st.expander("ดูค่าตัวเลขแบบละเอียด"):
-        for _, row in df_top5.iterrows():
-            st.write(f"**{row['class']}**: {row['percent']:.2f}%")
+        for cname, prob in all_probs:
+            st.write(f"**{cname}**: {prob*100:.2f}%")
 else:
     st.info("👆 อัปโหลดภาพด้านบนเพื่อเริ่มทำนายผล")
