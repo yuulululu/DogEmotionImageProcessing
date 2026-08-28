@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 
-st.set_page_config(page_title="Dog Emotion Classifier", layout="centered")
+st.set_page_config(page_title="Doggoo Emotional", layout="centered")
 
 # สีไล่ตามอันดับ (rank 1 = เขียว, 2 = ส้ม, 3 = ม่วง, 4 = ฟ้า, 5 = ชมพู)
 RANK_COLORS = [
@@ -33,7 +33,7 @@ def load_model(path: str):
 st.sidebar.header("⚙️ Settings")
 model_path = st.sidebar.text_input(
     "Model path (.pt)",
-    value="runs/classify/runs_classify/custom_classifier_exp/weights/best.pt",
+    value="runs_classify/custom_classifier_exp/weights/best.pt",
     help="ใส่ path ของโมเดลที่เทรนเอง หรือใช้ yolo11n-cls.pt / yolov8n-cls.pt สำหรับทดสอบ",
 )
 
@@ -47,7 +47,7 @@ except Exception as e:
 # ----------------------------------------------------------------------
 # 2. หน้าหลัก — อัปโหลดภาพ
 # ----------------------------------------------------------------------
-st.title("🔮 AI Image Classification")
+st.title("Dog Emotion Classifier")
 st.write("อัปโหลดภาพเพื่อให้โมเดลทำนายผล พร้อมแสดงเปอร์เซ็นต์ความมั่นใจของแต่ละคลาส")
 
 uploaded_file = st.file_uploader("เลือกไฟล์ภาพ (jpg, png)", type=["jpg", "jpeg", "png"])
@@ -78,20 +78,23 @@ if uploaded_file is not None:
     img_b64 = base64.b64encode(buf.getvalue()).decode()
 
     # แถวรายการ prediction แต่ละอันดับ
-    rows_html = ""
+    # หมายเหตุ: เขียนทุกแถวเป็นบรรทัดเดียวไม่เว้นบรรทัดว่าง/ไม่เยื้อง เพื่อไม่ให้ตัวแปลง Markdown
+    # ตีความเป็น code block (แม้จะ render ผ่าน st.html ที่ไม่ผ่าน Markdown แล้วก็ตาม แต่เขียนสะอาดไว้ก่อน)
+    row_parts = []
     for rank, (cname, prob) in enumerate(all_probs, start=1):
         pct = prob * 100
         dark, light = RANK_COLORS[(rank - 1) % len(RANK_COLORS)]
-        rows_html += f"""
-        <div class="pred-row">
-            <div class="pred-rank" style="background:{dark};">{rank}</div>
-            <div class="pred-name">{cname.capitalize()}</div>
-            <div class="pred-bar-bg">
-                <div class="pred-bar-fill" style="width:{max(pct, 2):.1f}%; background:linear-gradient(90deg,{light},{dark});"></div>
-            </div>
-            <div class="pred-pct">{pct:.2f}%</div>
-        </div>
-        """
+        row_parts.append(
+            f'<div class="pred-row">'
+            f'<div class="pred-rank" style="background:{dark};">{rank}</div>'
+            f'<div class="pred-name">{cname.capitalize()}</div>'
+            f'<div class="pred-bar-bg">'
+            f'<div class="pred-bar-fill" style="width:{max(pct, 2):.1f}%; background:linear-gradient(90deg,{light},{dark});"></div>'
+            f'</div>'
+            f'<div class="pred-pct">{pct:.2f}%</div>'
+            f'</div>'
+        )
+    rows_html = "".join(row_parts)
 
     card_html = f"""
     <style>
@@ -207,7 +210,7 @@ if uploaded_file is not None:
     </div>
     """
 
-    st.markdown(card_html, unsafe_allow_html=True)
+    st.html(card_html)
 
     with st.expander("ดูค่าตัวเลขแบบละเอียด"):
         for cname, prob in all_probs:
