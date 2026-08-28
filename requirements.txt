@@ -2,3 +2,7 @@ kagglehub
 numpy
 matplotlib
 Pillow
+ultralytics
+streamlit
+pandas
+altair
