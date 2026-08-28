@@ -33,7 +33,7 @@ def load_model(path: str):
 st.sidebar.header("⚙️ Settings")
 model_path = st.sidebar.text_input(
     "Model path (.pt)",
-    value="runs_classify/custom_classifier_exp/weights/best.pt",
+    value="runs/classify/runs_classify/custom_classifier_exp/weights/best.pt",
     help="ใส่ path ของโมเดลที่เทรนเอง หรือใช้ yolo11n-cls.pt / yolov8n-cls.pt สำหรับทดสอบ",
 )
 
